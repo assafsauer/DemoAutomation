@@ -1,0 +1,83 @@
+---
+- hosts: localhost 
+  vars:
+    lamp_ip: "10.4.4.10"
+    lamp_gw: "10.4.4.3"
+    lamp_dns: "192.168.1.80"
+    lamp_netmask: "255.255.255.0"
+  become: no
+  gather_facts: False
+  tasks:
+    - name: Deploy VMware Identity Manager OVA
+      vmware_deploy_ovf:
+        hostname: vcsa.osauer.local 
+        username: administrator@vsphere.local
+        password: SAuer1357V!
+        validate_certs: no
+        name: Lamp-stack
+        datacenter: PKS-DC
+        cluster: MGMT
+        datastore: datastore2
+        disk_provisioning: thin
+        networks: "{u'bridged':u'switch-2'}"  
+        ova: /home/asauer/bitnami-lampstack-7.3.14-0-linux-centos-7-x86_64.ova
+        allow_duplicates: no
+        power_on: yes
+        inject_ovf_env: yes
+        properties: "{u'va-ssh-public-key':u'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDPl2rWH5tKQdpO1ncub4Ywd65Lj4J4KzHJI1oWQRbFAC2wh4EvfKD93p/xhtZaMWDIqthK6UYjzBuggu+Oos1MD+BCb9hBit9MmUsqWFpuQGMG6cGN9cEd15rmN9U5CR6bkNH8N1jh5ojuML1yQNe9HPTkzdOR3njo6LFiwkTDhIp8oQaLi/9vv+6TI2a9Wv1DRU3z02FoNtLadtSF0sd9g+qWDXTpJuGxa32d9Vc4V+uwB1AU5Exm+zphi2zP1Y0j1u92RHB+cbtJPt/+0CWDL06QjaUypC+FByKFvTw/LKHW2usDHOB4D8q6DUaD1EePrNH8ejQlxAefCbLHV1PCmQ977rJRI9hOsWUImhVzPs+iWgIM8Yf94XW2IT1rGql1FkickYJ9c5CBDl6EssMYCwrjAcbidZ31y3kftfX/vbm74bqwc1fdbu1/m+t34/9d2s7WWyHs6dCqFXZZPpGltdw89tg381Xq2/LxSRwPyioLY0hgTGmTZWEQNz6Rr+/qKdazXqxwwbYqg0/UwVtKnB3ISMxfPMGYV1fWTHC7bF6HXro2PfIdXExNbPzejRtwDIjYc1qS/yFWwsPNsALM4CZWlfUf7EIz8QC8zZYQUXzFxyQ/TuMOI70M9euzzJCeETIKXNbneThiAoGUaGOyiQnKuTToJXQ5zWAogkQvLw== bitnami', u'network.ip0':u'{{ lamp_ip }}', u'network.gateway':u'{{ lamp_gw }}', u'network.dns':u'{{ lamp_dns }}', u'network.netmask0':u'{{ lamp_netmask }}'}"
+      delegate_to: localhost
+    - name: remove ~/.ssh/known_hosts file
+      local_action: file path=~/.ssh/known_hosts state=absent
+    - pause:
+        minutes: 1
+
+
+- hosts: lamp
+  become: yes
+  remote_user: bitnami
+  tasks:
+    - name: get creds
+      shell: sed -n "s/^.*'\(.*\)'.*$/\1/ p" bitnami_credentials
+      register: creds
+    - name: Copy database dump file
+      copy:
+        src: world.sql
+        dest: /tmp
+    - name: Install OS packages for mysql and ansible
+      yum: name={{item}} state=present
+      with_items:
+        - mysql-devel
+        - gcc
+        - python-devel
+        - MySQL-python
+        - python-pip
+    - name: Install MySQL-Python  module
+      pip: name=MySQL-python
+    - name: test
+      command: echo {{ creds.stdout }}
+    - name: Restore database
+      become: yes
+      mysql_db:
+        name: world
+        state: import
+        target: /tmp/world.sql
+        login_user: root
+        login_password: "{{ creds.stdout }}"
+        config_file: /opt/bitnami/mysql/my.cnf
+        login_unix_socket: /opt/bitnami/mysql/tmp/mysql.sock
+        
+    - name: Add password to apache environment
+      become: yes
+      shell: echo SetEnv mysql-pw {{ creds.stdout }} >> /opt/bitnami/apache2/conf/httpd.conf 
+
+
+    - name: Copy php file
+      become: yes
+      copy:
+        src: database.php
+        dest: /opt/bitnami/apache2/htdocs/
+
+
+    - name: restart apache
+      become: yes
+      shell:  apachectl -k restart
