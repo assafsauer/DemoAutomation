@@ -19,5 +19,5 @@ Terraform v0.12.7
 + provider.nsxt (unversioned)
 + provider.vsphere v1.5.0
 
-![Screenshot](AutomationDemopng)
+![Screenshot](AutomationDemo.png)
 
