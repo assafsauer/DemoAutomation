@@ -1,4 +1,4 @@
-# DemoAutomation
+s# DemoAutomation
 Automation Demo usign Ansible and Terraform
 
 
@@ -18,3 +18,5 @@ $ ./terraform version
 Terraform v0.12.7
 + provider.nsxt (unversioned)
 + provider.vsphere v1.5.0
+
+
