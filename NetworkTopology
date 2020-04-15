@@ -1,0 +1,66 @@
+# Copyright 2018 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-3.0-only
+---
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  vars_files:
+    - var.yml
+  tasks:
+ 
+    - name: Create logical switch
+      nsxt_logical_switches:
+        hostname: "{{hostname}}"
+        username: "{{username}}"
+        password: "{{password}}"
+        validate_certs: False
+        display_name: "switch-2"
+        replication_mode: SOURCE
+        admin_state: UP
+        transport_zone_name: "TZ-OVERLAY"
+        vlan: 0
+        state: "present"
+ 
+    - name: Logical Switch Port for uplink_1
+      nsxt_logical_ports:
+        hostname: "{{hostname}}"
+        username: "{{username}}"
+        password: "{{password}}"
+        validate_certs: False
+        display_name: lsp_for_uplink_1
+        logical_switch_name: "switch-2"
+        admin_state: UP
+        state: present
+      register: vlan_lsp
+ 
+    - name: Create logical router
+      nsxt_logical_routers:
+        hostname: "{{hostname}}"
+        username: "{{username}}"
+        password: "{{password}}"
+        validate_certs: False
+        display_name: "router1"
+        edge_cluster_name: Cluster-1
+        router_type: TIER1
+        high_availability_mode: ACTIVE_STANDBY
+        state: present
+      register: t1_app1 
+ 
+    - name: Create logical router port for uplink1
+      nsxt_logical_router_ports:
+        hostname: "{{hostname}}"
+        username: "{{username}}"
+        password: "{{password}}"
+        validate_certs: False
+        display_name: t0_uplink_1
+        resource_type: LogicalRouterDownLinkPort
+        logical_router_name: "router1"
+        linked_logical_switch_port_id:
+          target_type: LogicalPort
+          target_id: "{{vlan_lsp.id}}"
+        subnets:
+        - ip_addresses:
+          - "10.4.4.3"
+          prefix_length: "24"
+        state: present
+      register: uplink_lrp
